@@ -5,7 +5,7 @@ import { Heart, Users, Stethoscope, ArrowRight, ShieldCheck, Activity, Clipboard
 const roles = {
   patient: { label: 'Doente', icon: Heart, intro: 'O seu espaço de acompanhamento e bem-estar.' },
   caregiver: { label: 'Cuidador', icon: HandHeart, intro: 'O seu bem-estar também merece cuidado.' },
-  professional: { label: 'Profissional', icon: Stethoscope, intro: 'Acompanhe necessidades e coordene cuidados.' }
+  professional: { label: 'Médico de família', icon: Stethoscope, intro: 'Acompanhe necessidades e coordene cuidados.' }
 };
 
 function App() {
@@ -52,7 +52,7 @@ function App() {
       options: { data: { full_name: form.name, requested_role: form.role } }
     });
     setBusy(false);
-    setMessage(error ? error.message : 'Conta criada. Verifique o seu email para confirmar o registo. O acesso a funções profissionais/cuidador pode exigir validação do administrador.');
+    setMessage(error ? error.message : 'Conta criada. Verifique o seu email para confirmar o registo. Depois, poderá aceder diretamente à área correspondente ao perfil escolhido.');
   }
 
   async function signIn(e) {
@@ -108,7 +108,7 @@ function App() {
         </div>
         <div className="hero-art">
           <div className="art-orb orb-one"></div><div className="art-orb orb-two"></div>
-          <div className="art-card"><div className="art-people"><span>👵🏻</span><span>👩🏻</span><span>🧑🏻‍⚕️</span></div><div className="art-labels"><b>Doente</b><b>Cuidador</b><b>Profissional</b></div><div className="art-message"><Heart size={17} fill="currentColor"/> Cuidar em conjunto faz a diferença</div></div>
+          <div className="art-card"><div className="art-people"><span>👵🏻</span><span>👩🏻</span><span>🧑🏻‍⚕️</span></div><div className="art-labels"><b>Doente</b><b>Cuidador</b><b>Médico de família</b></div><div className="art-message"><Heart size={17} fill="currentColor"/> Cuidar em conjunto faz a diferença</div></div>
           <div className="float-pill pill-a">♡ Bem-estar</div><div className="float-pill pill-b">✧ Acompanhamento</div>
         </div>
       </section>
@@ -125,7 +125,7 @@ function App() {
         {page === 'register' && <label>Nome completo<input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="O seu nome"/></label>}
         <label>Email<input type="email" required value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="nome@email.com"/></label>
         <label>Palavra-passe<input type="password" minLength="8" required value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Mínimo de 8 caracteres"/></label>
-        {page === 'register' && <label>Perfil<select value={form.role} onChange={e=>{setForm({...form,role:e.target.value});setRole(e.target.value)}}><option value="patient">Doente</option><option value="caregiver">Cuidador</option><option value="professional">Profissional de saúde</option></select></label>}
+        {page === 'register' && <label>Perfil<select value={form.role} onChange={e=>{setForm({...form,role:e.target.value});setRole(e.target.value)}}><option value="patient">Doente</option><option value="caregiver">Cuidador</option><option value="professional">Médico de família</option></select></label>}
         <button className="button full" disabled={busy || !configured}>{busy ? 'A processar…' : page === 'login' ? 'Iniciar sessão' : 'Criar conta'} <ArrowRight size={17}/></button>
       </form>
       {!configured && <p className="inline-warning">A autenticação ficará disponível depois de configurar as credenciais do Supabase.</p>}

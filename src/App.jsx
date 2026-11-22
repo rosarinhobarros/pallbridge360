@@ -1049,331 +1049,332 @@ function App() {
                   </>
                 )}
 
-                {/* ÁREA DO MÉDICO */}
-                {profile.role === 'professional' && (
-                  <>
-                    <div className="notice">
-                      <Stethoscope size={18}/>
-                      Área de acompanhamento profissional.
+{/* ÁREA DO MÉDICO */}
+{profile.role === 'professional' && (
+  <>
+    <div className="notice">
+      <Stethoscope size={18}/>
+      Área de acompanhamento profissional.
+    </div>
+
+    {!selectedPatient ? (
+      <>
+        <div className="content-card">
+          <h3><Link2 size={19}/> Associar novo doente</h3>
+
+          <p>
+            Introduza o código de associação de 8 caracteres fornecido pelo doente.
+          </p>
+
+          <form onSubmit={joinPatient}>
+            <label>
+              Código de associação
+              <input
+                type="text"
+                maxLength="8"
+                minLength="8"
+                value={joinCode}
+                onChange={e => setJoinCode(e.target.value.toUpperCase())}
+                placeholder="Ex.: ABCD1234"
+                required
+              />
+            </label>
+
+            <button className="button" disabled={associationBusy}>
+              {associationBusy ? 'A associar…' : 'Associar doente'}
+            </button>
+          </form>
+        </div>
+
+        <div className="content-card">
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'12px',flexWrap:'wrap'}}>
+            <h3><Users size={19}/> Os meus pacientes ({patients.length})</h3>
+
+            <button
+              type="button"
+              className="button secondary"
+              onClick={loadPatients}
+              disabled={loadingPatients}
+            >
+              <RefreshCw size={15}/> Atualizar
+            </button>
+          </div>
+
+          <label style={{display:'block',marginTop:'16px'}}>
+            <span style={{display:'flex',alignItems:'center',gap:'8px'}}>
+              <Search size={17}/> Pesquisar paciente
+            </span>
+            <input
+              type="search"
+              value={patientSearch}
+              onChange={e => setPatientSearch(e.target.value)}
+              placeholder="Escreva o nome do paciente..."
+            />
+          </label>
+
+          {loadingPatients ? (
+            <p className="muted">A carregar pacientes...</p>
+          ) : filteredPatients.length ? (
+            <div style={{display:'grid',gap:'12px',marginTop:'18px'}}>
+              {filteredPatients.map(patient => (
+                <button
+                  type="button"
+                  key={patient.id}
+                  onClick={() => openPatient(patient)}
+                  style={{
+                    display:'flex',
+                    justifyContent:'space-between',
+                    alignItems:'center',
+                    gap:'12px',
+                    textAlign:'left',
+                    padding:'16px',
+                    border:'1px solid #e5e7eb',
+                    borderRadius:'12px',
+                    background:'#fff',
+                    color:'inherit',
+                    cursor:'pointer',
+                    width:'100%'
+                  }}
+                >
+                  <span style={{display:'flex',alignItems:'center',gap:'12px',minWidth:0}}>
+                    <span style={{
+                      width:'42px',
+                      height:'42px',
+                      borderRadius:'50%',
+                      background:'#f3e8ee',
+                      display:'flex',
+                      alignItems:'center',
+                      justifyContent:'center',
+                      flexShrink:0
+                    }}>
+                      <UserRound size={20}/>
+                    </span>
+
+                    <span style={{display:'grid',gap:'4px',minWidth:0}}>
+                      <strong>{patient.full_name || 'Paciente sem nome'}</strong>
+                      <small style={{color:'#6b7280'}}>
+                        Código: {patient.association_code || 'Não disponível'}
+                      </small>
+                    </span>
+                  </span>
+
+                  <ArrowRight size={19}/>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="muted" style={{marginTop:'16px'}}>
+              {patients.length
+                ? 'Não foram encontrados pacientes com esse nome.'
+                : 'Ainda não tem pacientes associados. Introduza um código acima para começar.'}
+            </p>
+          )}
+        </div>
+      </>
+    ) : (
+      <>
+        <div className="content-card">
+          <button
+            type="button"
+            className="button secondary"
+            onClick={() => {
+              setSelectedPatient(null);
+              setPatientEntries([]);
+              setViewedEntries({});
+              setMessage('');
+            }}
+          >
+            <ArrowLeft size={16}/> Voltar à lista de pacientes
+          </button>
+
+          <div style={{marginTop:'22px'}}>
+            <span className="eyebrow">Perfil do paciente</span>
+            <h2 style={{marginTop:'8px'}}>{selectedPatient.full_name}</h2>
+            <p className="muted">
+              Código de associação: <strong>{selectedPatient.association_code || 'Não disponível'}</strong>
+            </p>
+          </div>
+        </div>
+
+        <div className="content-card">
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'12px',flexWrap:'wrap'}}>
+            <h3><ClipboardList size={19}/> Histórico de registos</h3>
+
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => openPatient(selectedPatient)}
+              disabled={loadingRecords}
+            >
+              <RefreshCw size={15}/> Atualizar histórico
+            </button>
+          </div>
+
+          <p className="muted">
+            Consulte os registos submetidos por {selectedPatient.full_name}, por ordem cronológica.
+          </p>
+
+          {loadingRecords ? (
+            <p className="muted">A carregar o histórico...</p>
+          ) : patientEntries.length ? (
+            <div style={{display:'grid',gap:'16px',marginTop:'18px'}}>
+              {patientEntries.map(item => {
+                const answers = item.answers || {};
+                const alreadyViewed = Boolean(viewedEntries[item.id]);
+
+                return (
+                  <article
+                    key={item.id}
+                    style={{
+                      border:'1px solid #e5e7eb',
+                      borderRadius:'12px',
+                      padding:'16px',
+                      background:'#fff'
+                    }}
+                  >
+                    <div style={{
+                      display:'flex',
+                      justifyContent:'space-between',
+                      alignItems:'flex-start',
+                      gap:'12px',
+                      flexWrap:'wrap'
+                    }}>
+                      <div>
+                        <strong>
+                          {item.user_id === selectedPatient.id
+                            ? (item.kind === 'patient'
+                              ? 'Avaliação de bem-estar · Doente'
+                              : 'Registo do doente')
+                            : 'Registo do cuidador'}
+                        </strong>
+                        <p className="muted" style={{margin:'6px 0 0'}}>
+                          <CalendarDays size={14} style={{display:'inline',verticalAlign:'middle',marginRight:'5px'}}/>
+                          {formatDate(item.created_at)}
+                        </p>
+                      </div>
+
+                      {alreadyViewed ? (
+                        <span style={{
+                          display:'inline-flex',
+                          alignItems:'center',
+                          gap:'5px',
+                          color:'#15803d',
+                          fontSize:'13px',
+                          fontWeight:600
+                        }}>
+                          <Check size={16}/> Visualizado
+                        </span>
+                      ) : (
+                        <span style={{
+                          fontSize:'13px',
+                          color:'#a16207',
+                          fontWeight:600
+                        }}>
+                          Por visualizar
+                        </span>
+                      )}
                     </div>
 
-                    {!selectedPatient ? (
-                      <>
-                        <div className="content-card">
-                          <h3><Link2 size={19}/> Associar novo doente</h3>
+                    <div style={{
+                      marginTop:'16px',
+                      padding:'14px',
+                      borderRadius:'8px',
+                      background:'#f9fafb',
+                      display:'grid',
+                      gap:'10px'
+                    }}>
+                      {Object.entries(answers).map(([key, value]) => {
+                        const label = {
+                          pain:'Dor',
+                          fatigue:'Cansaço',
+                          breathlessness:'Falta de ar',
+                          mood:'Estado emocional',
+                          notes:'Observações',
+                          wellbeing:'Bem-estar',
+                          difficulties:'Dificuldades',
+                          needs:'Necessidades'
+                        }[key] || key;
 
-                          <p>
-                            Introduza o código de associação de 8 caracteres fornecido pelo doente.
-                          </p>
-
-                          <form onSubmit={joinPatient}>
-                            <label>
-                              Código de associação
-                              <input
-                                type="text"
-                                maxLength="8"
-                                minLength="8"
-                                value={joinCode}
-                                onChange={e => setJoinCode(e.target.value.toUpperCase())}
-                                placeholder="Ex.: ABCD1234"
-                                required
-                              />
-                            </label>
-
-                            <button className="button" disabled={associationBusy}>
-                              {associationBusy ? 'A associar…' : 'Associar doente'}
-                            </button>
-                          </form>
-                        </div>
-
-                        <div className="content-card">
-                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'12px',flexWrap:'wrap'}}>
-                            <h3><Users size={19}/> Os meus pacientes ({patients.length})</h3>
-
-                            <button
-                              type="button"
-                              className="button secondary"
-                              onClick={loadPatients}
-                              disabled={loadingPatients}
-                            >
-                              <RefreshCw size={15}/> Atualizar
-                            </button>
-                          </div>
-
-                          <label style={{display:'block',marginTop:'16px'}}>
-                            <span style={{display:'flex',alignItems:'center',gap:'8px'}}>
-                              <Search size={17}/> Pesquisar paciente
-                            </span>
-                            <input
-                              type="search"
-                              value={patientSearch}
-                              onChange={e => setPatientSearch(e.target.value)}
-                              placeholder="Escreva o nome do paciente..."
-                            />
-                          </label>
-
-                          {loadingPatients ? (
-                            <p className="muted">A carregar pacientes...</p>
-                          ) : filteredPatients.length ? (
-                            <div style={{display:'grid',gap:'12px',marginTop:'18px'}}>
-                              {filteredPatients.map(patient => (
-                                <button
-                                  type="button"
-                                  key={patient.id}
-                                  onClick={() => openPatient(patient)}
-                                  style={{
-                                    display:'flex',
-                                    justifyContent:'space-between',
-                                    alignItems:'center',
-                                    gap:'12px',
-                                    textAlign:'left',
-                                    padding:'16px',
-                                    border:'1px solid #e5e7eb',
-                                    borderRadius:'12px',
-                                    background:'#fff',
-                                    color:'inherit',
-                                    cursor:'pointer',
-                                    width:'100%'
-                                  }}
-                                >
-                                  <span style={{display:'flex',alignItems:'center',gap:'12px',minWidth:0}}>
-                                    <span style={{
-                                      width:'42px',
-                                      height:'42px',
-                                      borderRadius:'50%',
-                                      background:'#f3e8ee',
-                                      display:'flex',
-                                      alignItems:'center',
-                                      justifyContent:'center',
-                                      flexShrink:0
-                                    }}>
-                                      <UserRound size={20}/>
-                                    </span>
-
-                                    <span style={{display:'grid',gap:'4px',minWidth:0}}>
-                                      <strong>{patient.full_name || 'Paciente sem nome'}</strong>
-                                      <small style={{color:'#6b7280'}}>
-                                        Código: {patient.association_code || 'Não disponível'}
-                                      </small>
-                                    </span>
-                                  </span>
-
-                                  <ArrowRight size={19}/>
-                                </button>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="muted" style={{marginTop:'16px'}}>
-                              {patients.length
-                                ? 'Não foram encontrados pacientes com esse nome.'
-                                : 'Ainda não tem pacientes associados. Introduza um código acima para começar.'}
-                            </p>
-                          )}
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="content-card">
-                          <button
-                            type="button"
-                            className="button secondary"
-                            onClick={() => {
-                              setSelectedPatient(null);
-                              setPatientEntries([]);
-                              setViewedEntries({});
-                              setMessage('');
-                            }}
-                          >
-                            <ArrowLeft size={16}/> Voltar à lista de pacientes
-                          </button>
-
-                          <div style={{marginTop:'22px'}}>
-                            <span className="eyebrow">Perfil do paciente</span>
-                            <h2 style={{marginTop:'8px'}}>{selectedPatient.full_name}</h2>
-                            <p className="muted">
-                              Código de associação: <strong>{selectedPatient.association_code || 'Não disponível'}</strong>
+                        return (
+                          <div key={key}>
+                            <strong style={{fontSize:'13px'}}>{label}</strong>
+                            <p style={{
+                              margin:'4px 0 0',
+                              whiteSpace:'pre-wrap',
+                              overflowWrap:'anywhere',
+                              fontSize:'14px'
+                            }}>
+                              {formatAnswer(value)}
                             </p>
                           </div>
-                        </div>
+                        );
+                      })}
 
-                        <div className="content-card">
-                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'12px',flexWrap:'wrap'}}>
-                            <h3><ClipboardList size={19}/> Histórico de registos</h3>
+                      {!Object.keys(answers).length && (
+                        <p className="muted">Este registo não contém respostas.</p>
+                      )}
+                    </div>
 
-                            <button
-                              type="button"
-                              className="button secondary"
-                              onClick={() => openPatient(selectedPatient)}
-                              disabled={loadingRecords}
-                            >
-                              <RefreshCw size={15}/> Atualizar histórico
-                            </button>
-                          </div>
-
-                          <p className="muted">
-                            Consulte os registos submetidos por {selectedPatient.full_name}, por ordem cronológica.
-                          </p>
-
-                          {loadingRecords ? (
-                            <p className="muted">A carregar o histórico...</p>
-                          ) : patientEntries.length ? (
-                            <div style={{display:'grid',gap:'16px',marginTop:'18px'}}>
-                              {patientEntries.map(item => {
-                                const answers = item.answers || {};
-                                const alreadyViewed = Boolean(viewedEntries[item.id]);
-
-                                return (
-                                  <article
-                                    key={item.id}
-                                    style={{
-                                      border:'1px solid #e5e7eb',
-                                      borderRadius:'12px',
-                                      padding:'16px',
-                                      background:'#fff'
-                                    }}
-                                  >
-                                    <div style={{
-                                      display:'flex',
-                                      justifyContent:'space-between',
-                                      alignItems:'flex-start',
-                                      gap:'12px',
-                                      flexWrap:'wrap'
-                                    }}>
-                                      <div>
-                                        <strong>
-                                          {item.kind === 'patient'
-                                            ? 'Avaliação de bem-estar'
-                                            : item.kind === 'caregiver'
-                                              ? 'Registo de cuidador'
-                                              : 'Registo'}
-                                        </strong>
-                                        <p className="muted" style={{margin:'6px 0 0'}}>
-                                          <CalendarDays size={14} style={{display:'inline',verticalAlign:'middle',marginRight:'5px'}}/>
-                                          {formatDate(item.created_at)}
-                                        </p>
-                                      </div>
-
-                                      {alreadyViewed ? (
-                                        <span style={{
-                                          display:'inline-flex',
-                                          alignItems:'center',
-                                          gap:'5px',
-                                          color:'#15803d',
-                                          fontSize:'13px',
-                                          fontWeight:600
-                                        }}>
-                                          <Check size={16}/> Visualizado
-                                        </span>
-                                      ) : (
-                                        <span style={{
-                                          fontSize:'13px',
-                                          color:'#a16207',
-                                          fontWeight:600
-                                        }}>
-                                          Por visualizar
-                                        </span>
-                                      )}
-                                    </div>
-
-                                    <div style={{
-                                      marginTop:'16px',
-                                      padding:'14px',
-                                      borderRadius:'8px',
-                                      background:'#f9fafb',
-                                      display:'grid',
-                                      gap:'10px'
-                                    }}>
-                                      {Object.entries(answers).map(([key, value]) => {
-                                        const label = {
-                                          pain:'Dor',
-                                          fatigue:'Cansaço',
-                                          breathlessness:'Falta de ar',
-                                          mood:'Estado emocional',
-                                          notes:'Observações',
-                                          wellbeing:'Bem-estar',
-                                          difficulties:'Dificuldades',
-                                          needs:'Necessidades'
-                                        }[key] || key;
-
-                                        return (
-                                          <div key={key}>
-                                            <strong style={{fontSize:'13px'}}>{label}</strong>
-                                            <p style={{
-                                              margin:'4px 0 0',
-                                              whiteSpace:'pre-wrap',
-                                              overflowWrap:'anywhere',
-                                              fontSize:'14px'
-                                            }}>
-                                              {formatAnswer(value)}
-                                            </p>
-                                          </div>
-                                        );
-                                      })}
-
-                                      {!Object.keys(answers).length && (
-                                        <p className="muted">Este registo não contém respostas.</p>
-                                      )}
-                                    </div>
-
-                                    {alreadyViewed && (
-                                      <p style={{
-                                        color:'#15803d',
-                                        fontSize:'12px',
-                                        marginTop:'12px'
-                                      }}>
-                                        Visualizado em {formatDate(viewedEntries[item.id])}
-                                      </p>
-                                    )}
-
-                                    {!alreadyViewed && (
-                                      <button
-                                        type="button"
-                                        className="button"
-                                        style={{marginTop:'14px'}}
-                                        disabled={viewingBusy === item.id}
-                                        onClick={() => markAsViewed(item.id)}
-                                      >
-                                        <Eye size={16}/>
-                                        {viewingBusy === item.id
-                                          ? 'A guardar...'
-                                          : 'Marcar como visualizado'}
-                                      </button>
-                                    )}
-                                  </article>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <p className="muted" style={{marginTop:'16px'}}>
-                              Este paciente ainda não tem registos submetidos.
-                            </p>
-                          )}
-                        </div>
-                      </>
+                    {alreadyViewed && (
+                      <p style={{
+                        color:'#15803d',
+                        fontSize:'12px',
+                        marginTop:'12px'
+                      }}>
+                        Visualizado em {formatDate(viewedEntries[item.id])}
+                      </p>
                     )}
 
-                    <div className="content-card">
-                      <h3><ClipboardList size={19}/> Notas de acompanhamento</h3>
+                    {!alreadyViewed && (
+                      <button
+                        type="button"
+                        className="button"
+                        style={{marginTop:'14px'}}
+                        disabled={viewingBusy === item.id}
+                        onClick={() => markAsViewed(item.id)}
+                      >
+                        <Eye size={16}/>
+                        {viewingBusy === item.id
+                          ? 'A guardar...'
+                          : 'Marcar como visualizado'}
+                      </button>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="muted" style={{marginTop:'16px'}}>
+              Este paciente ainda não tem registos submetidos.
+            </p>
+          )}
+        </div>
+      </>
+    )}
 
-                      <form onSubmit={saveProfessionalNote}>
-                        <label>
-                          Nota profissional
-                          <textarea
-                            rows="5"
-                            value={note}
-                            onChange={e => setNote(e.target.value)}
-                            required
-                            placeholder="Registe uma nota de acompanhamento…"
-                          />
-                        </label>
+    <div className="content-card">
+      <h3><ClipboardList size={19}/> Notas de acompanhamento</h3>
 
-                        <button className="button" disabled={busy}>
-                          Guardar nota
-                        </button>
-                      </form>
-                    </div>
-                  </>
-                )}
+      <form onSubmit={saveProfessionalNote}>
+        <label>
+          Nota profissional
+          <textarea
+            rows="5"
+            value={note}
+            onChange={e => setNote(e.target.value)}
+            required
+            placeholder="Registe uma nota de acompanhamento…"
+          />
+        </label>
+
+        <button className="button" disabled={busy}>
+          Guardar nota
+        </button>
+      </form>
+    </div>
+  </>
+)}
+
 
                 {profile.role !== 'professional' && (
                   <div className="content-card history">

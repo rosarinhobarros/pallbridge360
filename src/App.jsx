@@ -237,7 +237,8 @@ function App() {
     setLoadingPatients(false);
   }
 
-  // Abrir o perfil individual de um paciente
+
+  // Abrir o perfil individual de um paciente e carregar registos do doente e do cuidador
   async function openPatient(patient) {
     setSelectedPatient(patient);
     setPatientEntries([]);
@@ -245,10 +246,27 @@ function App() {
     setLoadingRecords(true);
     setMessage('');
 
+    // Descobrir qual é o cuidador associado a este doente
+    const { data: team, error: teamError } = await supabase
+      .from('patient_care_team')
+      .select('caregiver_id')
+      .eq('patient_id', patient.id)
+      .eq('doctor_id', session.user.id)
+      .maybeSingle();
+
+    if (teamError) {
+      setMessage('Não foi possível carregar a associação do cuidador: ' + teamError.message);
+      setLoadingRecords(false);
+      return;
+    }
+
+    // Procurar registos do doente e do cuidador
+    const userIds = [patient.id, team?.caregiver_id].filter(Boolean);
+
     const { data: records, error: recordsError } = await supabase
       .from('check_ins')
       .select('*')
-      .eq('user_id', patient.id)
+      .in('user_id', userIds)
       .order('created_at', { ascending: false });
 
     if (recordsError) {
@@ -257,11 +275,12 @@ function App() {
       return;
     }
 
-    const patientRecords = records || [];
-    setPatientEntries(patientRecords);
+    const allRecords = records || [];
+    setPatientEntries(allRecords);
 
-    if (patientRecords.length) {
-      const recordIds = patientRecords.map(item => item.id);
+    // Consultar quais destes registos já foram visualizados pelo médico
+    if (allRecords.length) {
+      const recordIds = allRecords.map(item => item.id);
 
       const { data: views, error: viewsError } = await supabase
         .from('check_in_views')
@@ -284,6 +303,7 @@ function App() {
 
     setLoadingRecords(false);
   }
+
 
   // Marcar um registo como visualizado
   async function markAsViewed(recordId) {

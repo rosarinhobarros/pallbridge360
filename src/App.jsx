@@ -881,7 +881,19 @@ function App() {
       .toLowerCase()
       .includes(patientSearch.toLowerCase())
   );
+  const priorityPatients = patients.filter(
+  patient => patient.hasPatientRecords && patient.concernScore >= 60
+);
 
+const attentionPatients = patients.filter(
+  patient => patient.hasPatientRecords &&
+    patient.concernScore >= 35 &&
+    patient.concernScore < 60
+);
+
+const patientsWithoutRecords = patients.filter(
+  patient => !patient.hasPatientRecords
+);
   const latestScore = selectedPatient?.concernScore ?? 0;
 
   return (

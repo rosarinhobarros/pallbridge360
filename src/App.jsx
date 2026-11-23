@@ -20,7 +20,7 @@ const roles = {
     intro: 'O seu bem-estar também merece cuidado.'
   },
   professional: {
-    label: 'Médico de família',
+    label: 'Profissional de saúde',
     icon: Stethoscope,
     intro: 'Acompanhe necessidades e coordene cuidados.'
   }
@@ -102,7 +102,7 @@ function App() {
   const [joinCode, setJoinCode] = useState('');
   const [associationBusy, setAssociationBusy] = useState(false);
 
-  // Estado da área do médico
+  // Área dos profissionais
   const [patients, setPatients] = useState([]);
   const [patientSearch, setPatientSearch] = useState('');
   const [selectedPatient, setSelectedPatient] = useState(null);
@@ -112,7 +112,11 @@ function App() {
   const [loadingRecords, setLoadingRecords] = useState(false);
   const [viewingBusy, setViewingBusy] = useState(null);
 
-  // Verificar sessão e encaminhar automaticamente
+  // Área do cuidador
+  const [caregiverPatient, setCaregiverPatient] = useState(null);
+  const [loadingCaregiverPatient, setLoadingCaregiverPatient] = useState(false);
+
+  // Verificar sessão
   useEffect(() => {
     if (!supabase) return;
 
@@ -137,6 +141,7 @@ function App() {
           setProfile(null);
           setEntries([]);
           setPatients([]);
+          setCaregiverPatient(null);
           setSelectedPatient(null);
           setPatientEntries([]);
           setViewedEntries({});
@@ -161,7 +166,7 @@ function App() {
   async function loadProfile() {
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, full_name, role, association_code')
+      .select('id, full_name, role, association_code, professional_specialty')
       .eq('id', session.user.id)
       .single();
 
@@ -172,12 +177,13 @@ function App() {
 
     setProfile(data);
 
-    if (data) {
-      if (data.role === 'professional') {
-        loadPatients();
-      } else {
-        loadEntries();
-      }
+    if (data?.role === 'professional') {
+      loadPatients();
+    } else if (data?.role === 'caregiver') {
+      loadEntries();
+      loadCaregiverPatient();
+    } else if (data?.role === 'patient') {
+      loadEntries();
     }
   }
 
@@ -191,27 +197,73 @@ function App() {
 
     if (!error) {
       setEntries(data || []);
+    } else {
+      setMessage('Não foi possível carregar os registos: ' + error.message);
     }
   }
 
-  // Carregar todos os pacientes associados ao médico
+  // Carregar o único doente associado ao cuidador
+  async function loadCaregiverPatient() {
+    if (!session) return;
+
+    setLoadingCaregiverPatient(true);
+
+    const { data: link, error: linkError } = await supabase
+      .from('patient_team_members')
+      .select('patient_id')
+      .eq('member_id', session.user.id)
+      .eq('member_role', 'caregiver')
+      .maybeSingle();
+
+    if (linkError) {
+      setMessage('Não foi possível carregar a associação: ' + linkError.message);
+      setCaregiverPatient(null);
+      setLoadingCaregiverPatient(false);
+      return;
+    }
+
+    if (!link) {
+      setCaregiverPatient(null);
+      setLoadingCaregiverPatient(false);
+      return;
+    }
+
+    const { data: patient, error: patientError } = await supabase
+      .from('profiles')
+      .select('id, full_name, association_code')
+      .eq('id', link.patient_id)
+      .single();
+
+    if (patientError) {
+      setMessage('Não foi possível carregar o doente associado: ' + patientError.message);
+      setCaregiverPatient(null);
+      setLoadingCaregiverPatient(false);
+      return;
+    }
+
+    setCaregiverPatient(patient);
+    setLoadingCaregiverPatient(false);
+  }
+
+  // Carregar todos os doentes associados ao profissional
   async function loadPatients() {
     if (!session) return;
 
     setLoadingPatients(true);
 
     const { data: links, error: linksError } = await supabase
-      .from('patient_care_team')
+      .from('patient_team_members')
       .select('patient_id')
-      .eq('doctor_id', session.user.id);
+      .eq('member_id', session.user.id)
+      .eq('member_role', 'professional');
 
     if (linksError) {
-      setMessage('Não foi possível carregar os pacientes: ' + linksError.message);
+      setMessage('Não foi possível carregar os doentes: ' + linksError.message);
       setLoadingPatients(false);
       return;
     }
 
-    const patientIds = (links || []).map(item => item.patient_id);
+    const patientIds = [...new Set((links || []).map(item => item.patient_id))];
 
     if (!patientIds.length) {
       setPatients([]);
@@ -237,8 +289,7 @@ function App() {
     setLoadingPatients(false);
   }
 
-
-  // Abrir o perfil individual de um paciente e carregar registos do doente e do cuidador
+  // Abrir perfil do doente e carregar registos do doente e de todos os cuidadores
   async function openPatient(patient) {
     setSelectedPatient(patient);
     setPatientEntries([]);
@@ -246,22 +297,20 @@ function App() {
     setLoadingRecords(true);
     setMessage('');
 
-    // Descobrir qual é o cuidador associado a este doente
     const { data: team, error: teamError } = await supabase
-      .from('patient_care_team')
-      .select('caregiver_id')
+      .from('patient_team_members')
+      .select('member_id')
       .eq('patient_id', patient.id)
-      .eq('doctor_id', session.user.id)
-      .maybeSingle();
+      .eq('member_role', 'caregiver');
 
     if (teamError) {
-      setMessage('Não foi possível carregar a associação do cuidador: ' + teamError.message);
+      setMessage('Não foi possível carregar os cuidadores associados: ' + teamError.message);
       setLoadingRecords(false);
       return;
     }
 
-    // Procurar registos do doente e do cuidador
-    const userIds = [patient.id, team?.caregiver_id].filter(Boolean);
+    const caregiverIds = (team || []).map(item => item.member_id);
+    const userIds = [patient.id, ...caregiverIds];
 
     const { data: records, error: recordsError } = await supabase
       .from('check_ins')
@@ -278,7 +327,6 @@ function App() {
     const allRecords = records || [];
     setPatientEntries(allRecords);
 
-    // Consultar quais destes registos já foram visualizados pelo médico
     if (allRecords.length) {
       const recordIds = allRecords.map(item => item.id);
 
@@ -303,7 +351,6 @@ function App() {
 
     setLoadingRecords(false);
   }
-
 
   // Marcar um registo como visualizado
   async function markAsViewed(recordId) {
@@ -363,7 +410,7 @@ function App() {
     );
   }
 
-  // Iniciar sessão e abrir diretamente a área pessoal
+  // Iniciar sessão
   async function signIn(e) {
     e.preventDefault();
     setBusy(true);
@@ -386,7 +433,7 @@ function App() {
     setMessage('');
   }
 
-  // Associar médico ou cuidador ao doente
+  // Associar profissional ou cuidador através do código do doente
   async function joinPatient(e) {
     e.preventDefault();
 
@@ -414,6 +461,8 @@ function App() {
 
     if (profile.role === 'professional') {
       await loadPatients();
+    } else if (profile.role === 'caregiver') {
+      await loadCaregiverPatient();
     }
   }
 
@@ -486,6 +535,7 @@ function App() {
     setProfile(null);
     setEntries([]);
     setPatients([]);
+    setCaregiverPatient(null);
     setSelectedPatient(null);
     setPatientEntries([]);
     setViewedEntries({});
@@ -616,7 +666,7 @@ function App() {
                 </div>
 
                 <div className="art-labels">
-                  <b>Doente</b><b>Cuidador</b><b>Médico de família</b>
+                  <b>Doente</b><b>Cuidador</b><b>Profissional de saúde</b>
                 </div>
 
                 <div className="art-message">
@@ -770,7 +820,7 @@ function App() {
                   >
                     <option value="patient">Doente</option>
                     <option value="caregiver">Cuidador</option>
-                    <option value="professional">Médico de família</option>
+                    <option value="professional">Profissional de saúde</option>
                   </select>
                 </label>
               )}
@@ -833,6 +883,12 @@ function App() {
                     </h2>
 
                     <p>{roles[profile.role]?.intro}</p>
+
+                    {profile.role === 'professional' && profile.professional_specialty && (
+                      <p className="muted">
+                        Área profissional: {profile.professional_specialty}
+                      </p>
+                    )}
                   </div>
 
                   <button className="button secondary" onClick={signOut}>
@@ -852,8 +908,8 @@ function App() {
                       <h3><Link2 size={19}/> O seu código de associação</h3>
 
                       <p>
-                        Partilhe este código com o seu médico de família e com o seu cuidador
-                        para que possam associar-se à sua conta.
+                        Partilhe este código com os profissionais de saúde e com os cuidadores
+                        que fazem parte da sua equipa de acompanhamento.
                       </p>
 
                       {profile.association_code ? (
@@ -955,30 +1011,62 @@ function App() {
                     </div>
 
                     <div className="content-card">
-                      <h3><Link2 size={19}/> Associar ao doente</h3>
+                      <h3><Users size={19}/> Doente associado</h3>
 
-                      <p>
-                        Introduza o código de associação de 8 caracteres fornecido pelo doente.
-                      </p>
+                      {loadingCaregiverPatient ? (
+                        <p className="muted">A carregar o doente associado...</p>
+                      ) : caregiverPatient ? (
+                        <>
+                          <p>Está associado ao seguinte doente:</p>
 
-                      <form onSubmit={joinPatient}>
-                        <label>
-                          Código de associação
-                          <input
-                            type="text"
-                            maxLength="8"
-                            minLength="8"
-                            value={joinCode}
-                            onChange={e => setJoinCode(e.target.value.toUpperCase())}
-                            placeholder="Ex.: ABCD1234"
-                            required
-                          />
-                        </label>
+                          <div style={{
+                            display:'flex',
+                            alignItems:'center',
+                            gap:'12px',
+                            padding:'16px',
+                            border:'1px solid #e5e7eb',
+                            borderRadius:'12px',
+                            background:'#fff'
+                          }}>
+                            <UserRound size={24}/>
+                            <div>
+                              <strong>{caregiverPatient.full_name || 'Doente sem nome'}</strong>
+                              <p className="muted" style={{margin:'4px 0 0'}}>
+                                Código: {caregiverPatient.association_code || 'Não disponível'}
+                              </p>
+                            </div>
+                          </div>
 
-                        <button className="button" disabled={associationBusy}>
-                          {associationBusy ? 'A associar…' : 'Associar ao doente'}
-                        </button>
-                      </form>
+                          <p className="fine-print" style={{marginTop:'12px'}}>
+                            Cada cuidador só pode estar associado a um doente. A associação não pode ser alterada nesta área.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p>
+                            Ainda não está associado a nenhum doente. Introduza o código fornecido pelo doente.
+                          </p>
+
+                          <form onSubmit={joinPatient}>
+                            <label>
+                              Código de associação
+                              <input
+                                type="text"
+                                maxLength="8"
+                                minLength="8"
+                                value={joinCode}
+                                onChange={e => setJoinCode(e.target.value.toUpperCase())}
+                                placeholder="Ex.: ABCD1234"
+                                required
+                              />
+                            </label>
+
+                            <button className="button" disabled={associationBusy}>
+                              {associationBusy ? 'A associar…' : 'Associar ao doente'}
+                            </button>
+                          </form>
+                        </>
+                      )}
                     </div>
 
                     <div className="content-card">
@@ -1049,332 +1137,357 @@ function App() {
                   </>
                 )}
 
-{/* ÁREA DO MÉDICO */}
-{profile.role === 'professional' && (
-  <>
-    <div className="notice">
-      <Stethoscope size={18}/>
-      Área de acompanhamento profissional.
-    </div>
-
-    {!selectedPatient ? (
-      <>
-        <div className="content-card">
-          <h3><Link2 size={19}/> Associar novo doente</h3>
-
-          <p>
-            Introduza o código de associação de 8 caracteres fornecido pelo doente.
-          </p>
-
-          <form onSubmit={joinPatient}>
-            <label>
-              Código de associação
-              <input
-                type="text"
-                maxLength="8"
-                minLength="8"
-                value={joinCode}
-                onChange={e => setJoinCode(e.target.value.toUpperCase())}
-                placeholder="Ex.: ABCD1234"
-                required
-              />
-            </label>
-
-            <button className="button" disabled={associationBusy}>
-              {associationBusy ? 'A associar…' : 'Associar doente'}
-            </button>
-          </form>
-        </div>
-
-        <div className="content-card">
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'12px',flexWrap:'wrap'}}>
-            <h3><Users size={19}/> Os meus pacientes ({patients.length})</h3>
-
-            <button
-              type="button"
-              className="button secondary"
-              onClick={loadPatients}
-              disabled={loadingPatients}
-            >
-              <RefreshCw size={15}/> Atualizar
-            </button>
-          </div>
-
-          <label style={{display:'block',marginTop:'16px'}}>
-            <span style={{display:'flex',alignItems:'center',gap:'8px'}}>
-              <Search size={17}/> Pesquisar paciente
-            </span>
-            <input
-              type="search"
-              value={patientSearch}
-              onChange={e => setPatientSearch(e.target.value)}
-              placeholder="Escreva o nome do paciente..."
-            />
-          </label>
-
-          {loadingPatients ? (
-            <p className="muted">A carregar pacientes...</p>
-          ) : filteredPatients.length ? (
-            <div style={{display:'grid',gap:'12px',marginTop:'18px'}}>
-              {filteredPatients.map(patient => (
-                <button
-                  type="button"
-                  key={patient.id}
-                  onClick={() => openPatient(patient)}
-                  style={{
-                    display:'flex',
-                    justifyContent:'space-between',
-                    alignItems:'center',
-                    gap:'12px',
-                    textAlign:'left',
-                    padding:'16px',
-                    border:'1px solid #e5e7eb',
-                    borderRadius:'12px',
-                    background:'#fff',
-                    color:'inherit',
-                    cursor:'pointer',
-                    width:'100%'
-                  }}
-                >
-                  <span style={{display:'flex',alignItems:'center',gap:'12px',minWidth:0}}>
-                    <span style={{
-                      width:'42px',
-                      height:'42px',
-                      borderRadius:'50%',
-                      background:'#f3e8ee',
-                      display:'flex',
-                      alignItems:'center',
-                      justifyContent:'center',
-                      flexShrink:0
-                    }}>
-                      <UserRound size={20}/>
-                    </span>
-
-                    <span style={{display:'grid',gap:'4px',minWidth:0}}>
-                      <strong>{patient.full_name || 'Paciente sem nome'}</strong>
-                      <small style={{color:'#6b7280'}}>
-                        Código: {patient.association_code || 'Não disponível'}
-                      </small>
-                    </span>
-                  </span>
-
-                  <ArrowRight size={19}/>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p className="muted" style={{marginTop:'16px'}}>
-              {patients.length
-                ? 'Não foram encontrados pacientes com esse nome.'
-                : 'Ainda não tem pacientes associados. Introduza um código acima para começar.'}
-            </p>
-          )}
-        </div>
-      </>
-    ) : (
-      <>
-        <div className="content-card">
-          <button
-            type="button"
-            className="button secondary"
-            onClick={() => {
-              setSelectedPatient(null);
-              setPatientEntries([]);
-              setViewedEntries({});
-              setMessage('');
-            }}
-          >
-            <ArrowLeft size={16}/> Voltar à lista de pacientes
-          </button>
-
-          <div style={{marginTop:'22px'}}>
-            <span className="eyebrow">Perfil do paciente</span>
-            <h2 style={{marginTop:'8px'}}>{selectedPatient.full_name}</h2>
-            <p className="muted">
-              Código de associação: <strong>{selectedPatient.association_code || 'Não disponível'}</strong>
-            </p>
-          </div>
-        </div>
-
-        <div className="content-card">
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'12px',flexWrap:'wrap'}}>
-            <h3><ClipboardList size={19}/> Histórico de registos</h3>
-
-            <button
-              type="button"
-              className="button secondary"
-              onClick={() => openPatient(selectedPatient)}
-              disabled={loadingRecords}
-            >
-              <RefreshCw size={15}/> Atualizar histórico
-            </button>
-          </div>
-
-          <p className="muted">
-            Consulte os registos submetidos por {selectedPatient.full_name}, por ordem cronológica.
-          </p>
-
-          {loadingRecords ? (
-            <p className="muted">A carregar o histórico...</p>
-          ) : patientEntries.length ? (
-            <div style={{display:'grid',gap:'16px',marginTop:'18px'}}>
-              {patientEntries.map(item => {
-                const answers = item.answers || {};
-                const alreadyViewed = Boolean(viewedEntries[item.id]);
-
-                return (
-                  <article
-                    key={item.id}
-                    style={{
-                      border:'1px solid #e5e7eb',
-                      borderRadius:'12px',
-                      padding:'16px',
-                      background:'#fff'
-                    }}
-                  >
-                    <div style={{
-                      display:'flex',
-                      justifyContent:'space-between',
-                      alignItems:'flex-start',
-                      gap:'12px',
-                      flexWrap:'wrap'
-                    }}>
-                      <div>
-                        <strong>
-                          {item.user_id === selectedPatient.id
-                            ? (item.kind === 'patient'
-                              ? 'Avaliação de bem-estar · Doente'
-                              : 'Registo do doente')
-                            : 'Registo do cuidador'}
-                        </strong>
-                        <p className="muted" style={{margin:'6px 0 0'}}>
-                          <CalendarDays size={14} style={{display:'inline',verticalAlign:'middle',marginRight:'5px'}}/>
-                          {formatDate(item.created_at)}
-                        </p>
-                      </div>
-
-                      {alreadyViewed ? (
-                        <span style={{
-                          display:'inline-flex',
-                          alignItems:'center',
-                          gap:'5px',
-                          color:'#15803d',
-                          fontSize:'13px',
-                          fontWeight:600
-                        }}>
-                          <Check size={16}/> Visualizado
-                        </span>
-                      ) : (
-                        <span style={{
-                          fontSize:'13px',
-                          color:'#a16207',
-                          fontWeight:600
-                        }}>
-                          Por visualizar
-                        </span>
-                      )}
+                {/* ÁREA DO PROFISSIONAL DE SAÚDE */}
+                {profile.role === 'professional' && (
+                  <>
+                    <div className="notice">
+                      <Stethoscope size={18}/>
+                      Área de acompanhamento profissional e coordenação multidisciplinar.
                     </div>
 
-                    <div style={{
-                      marginTop:'16px',
-                      padding:'14px',
-                      borderRadius:'8px',
-                      background:'#f9fafb',
-                      display:'grid',
-                      gap:'10px'
-                    }}>
-                      {Object.entries(answers).map(([key, value]) => {
-                        const label = {
-                          pain:'Dor',
-                          fatigue:'Cansaço',
-                          breathlessness:'Falta de ar',
-                          mood:'Estado emocional',
-                          notes:'Observações',
-                          wellbeing:'Bem-estar',
-                          difficulties:'Dificuldades',
-                          needs:'Necessidades'
-                        }[key] || key;
+                    {!selectedPatient ? (
+                      <>
+                        <div className="content-card">
+                          <h3><Link2 size={19}/> Associar novo doente</h3>
 
-                        return (
-                          <div key={key}>
-                            <strong style={{fontSize:'13px'}}>{label}</strong>
-                            <p style={{
-                              margin:'4px 0 0',
-                              whiteSpace:'pre-wrap',
-                              overflowWrap:'anywhere',
-                              fontSize:'14px'
-                            }}>
-                              {formatAnswer(value)}
+                          <p>
+                            Introduza o código de associação de 8 caracteres fornecido pelo doente.
+                            Vários profissionais podem acompanhar o mesmo doente.
+                          </p>
+
+                          <form onSubmit={joinPatient}>
+                            <label>
+                              Código de associação
+                              <input
+                                type="text"
+                                maxLength="8"
+                                minLength="8"
+                                value={joinCode}
+                                onChange={e => setJoinCode(e.target.value.toUpperCase())}
+                                placeholder="Ex.: ABCD1234"
+                                required
+                              />
+                            </label>
+
+                            <button className="button" disabled={associationBusy}>
+                              {associationBusy ? 'A associar…' : 'Associar doente'}
+                            </button>
+                          </form>
+                        </div>
+
+                        <div className="content-card">
+                          <div style={{
+                            display:'flex',
+                            justifyContent:'space-between',
+                            alignItems:'center',
+                            gap:'12px',
+                            flexWrap:'wrap'
+                          }}>
+                            <h3><Users size={19}/> Os meus doentes ({patients.length})</h3>
+
+                            <button
+                              type="button"
+                              className="button secondary"
+                              onClick={loadPatients}
+                              disabled={loadingPatients}
+                            >
+                              <RefreshCw size={15}/> Atualizar
+                            </button>
+                          </div>
+
+                          <label style={{display:'block',marginTop:'16px'}}>
+                            <span style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                              <Search size={17}/> Pesquisar doente
+                            </span>
+                            <input
+                              type="search"
+                              value={patientSearch}
+                              onChange={e => setPatientSearch(e.target.value)}
+                              placeholder="Escreva o nome do doente..."
+                            />
+                          </label>
+
+                          {loadingPatients ? (
+                            <p className="muted">A carregar doentes...</p>
+                          ) : filteredPatients.length ? (
+                            <div style={{display:'grid',gap:'12px',marginTop:'18px'}}>
+                              {filteredPatients.map(patient => (
+                                <button
+                                  type="button"
+                                  key={patient.id}
+                                  onClick={() => openPatient(patient)}
+                                  style={{
+                                    display:'flex',
+                                    justifyContent:'space-between',
+                                    alignItems:'center',
+                                    gap:'12px',
+                                    textAlign:'left',
+                                    padding:'16px',
+                                    border:'1px solid #e5e7eb',
+                                    borderRadius:'12px',
+                                    background:'#fff',
+                                    color:'inherit',
+                                    cursor:'pointer',
+                                    width:'100%'
+                                  }}
+                                >
+                                  <span style={{
+                                    display:'flex',
+                                    alignItems:'center',
+                                    gap:'12px',
+                                    minWidth:0
+                                  }}>
+                                    <span style={{
+                                      width:'42px',
+                                      height:'42px',
+                                      borderRadius:'50%',
+                                      background:'#f3e8ee',
+                                      display:'flex',
+                                      alignItems:'center',
+                                      justifyContent:'center',
+                                      flexShrink:0
+                                    }}>
+                                      <UserRound size={20}/>
+                                    </span>
+
+                                    <span style={{display:'grid',gap:'4px',minWidth:0}}>
+                                      <strong>{patient.full_name || 'Doente sem nome'}</strong>
+                                      <small style={{color:'#6b7280'}}>
+                                        Código: {patient.association_code || 'Não disponível'}
+                                      </small>
+                                    </span>
+                                  </span>
+
+                                  <ArrowRight size={19}/>
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="muted" style={{marginTop:'16px'}}>
+                              {patients.length
+                                ? 'Não foram encontrados doentes com esse nome.'
+                                : 'Ainda não tem doentes associados. Introduza um código acima para começar.'}
+                            </p>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="content-card">
+                          <button
+                            type="button"
+                            className="button secondary"
+                            onClick={() => {
+                              setSelectedPatient(null);
+                              setPatientEntries([]);
+                              setViewedEntries({});
+                              setMessage('');
+                            }}
+                          >
+                            <ArrowLeft size={16}/> Voltar à lista de doentes
+                          </button>
+
+                          <div style={{marginTop:'22px'}}>
+                            <span className="eyebrow">Perfil do doente</span>
+                            <h2 style={{marginTop:'8px'}}>{selectedPatient.full_name}</h2>
+                            <p className="muted">
+                              Código de associação: <strong>{selectedPatient.association_code || 'Não disponível'}</strong>
                             </p>
                           </div>
-                        );
-                      })}
+                        </div>
 
-                      {!Object.keys(answers).length && (
-                        <p className="muted">Este registo não contém respostas.</p>
-                      )}
+                        <div className="content-card">
+                          <div style={{
+                            display:'flex',
+                            justifyContent:'space-between',
+                            alignItems:'center',
+                            gap:'12px',
+                            flexWrap:'wrap'
+                          }}>
+                            <h3><ClipboardList size={19}/> Histórico de registos</h3>
+
+                            <button
+                              type="button"
+                              className="button secondary"
+                              onClick={() => openPatient(selectedPatient)}
+                              disabled={loadingRecords}
+                            >
+                              <RefreshCw size={15}/> Atualizar histórico
+                            </button>
+                          </div>
+
+                          <p className="muted">
+                            Consulte os registos submetidos pelo doente e pelos cuidadores associados, por ordem cronológica.
+                          </p>
+
+                          {loadingRecords ? (
+                            <p className="muted">A carregar o histórico...</p>
+                          ) : patientEntries.length ? (
+                            <div style={{display:'grid',gap:'16px',marginTop:'18px'}}>
+                              {patientEntries.map(item => {
+                                const answers = item.answers || {};
+                                const alreadyViewed = Boolean(viewedEntries[item.id]);
+
+                                return (
+                                  <article
+                                    key={item.id}
+                                    style={{
+                                      border:'1px solid #e5e7eb',
+                                      borderRadius:'12px',
+                                      padding:'16px',
+                                      background:'#fff'
+                                    }}
+                                  >
+                                    <div style={{
+                                      display:'flex',
+                                      justifyContent:'space-between',
+                                      alignItems:'flex-start',
+                                      gap:'12px',
+                                      flexWrap:'wrap'
+                                    }}>
+                                      <div>
+                                        <strong>
+                                          {item.user_id === selectedPatient.id
+                                            ? (item.kind === 'patient'
+                                              ? 'Avaliação de bem-estar · Doente'
+                                              : 'Registo do doente')
+                                            : 'Registo do cuidador'}
+                                        </strong>
+
+                                        <p className="muted" style={{margin:'6px 0 0'}}>
+                                          <CalendarDays
+                                            size={14}
+                                            style={{
+                                              display:'inline',
+                                              verticalAlign:'middle',
+                                              marginRight:'5px'
+                                            }}
+                                          />
+                                          {formatDate(item.created_at)}
+                                        </p>
+                                      </div>
+
+                                      {alreadyViewed ? (
+                                        <span style={{
+                                          display:'inline-flex',
+                                          alignItems:'center',
+                                          gap:'5px',
+                                          color:'#15803d',
+                                          fontSize:'13px',
+                                          fontWeight:600
+                                        }}>
+                                          <Check size={16}/> Visualizado
+                                        </span>
+                                      ) : (
+                                        <span style={{
+                                          fontSize:'13px',
+                                          color:'#a16207',
+                                          fontWeight:600
+                                        }}>
+                                          Por visualizar
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    <div style={{
+                                      marginTop:'16px',
+                                      padding:'14px',
+                                      borderRadius:'8px',
+                                      background:'#f9fafb',
+                                      display:'grid',
+                                      gap:'10px'
+                                    }}>
+                                      {Object.entries(answers).map(([key, value]) => {
+                                        const label = {
+                                          pain:'Dor',
+                                          fatigue:'Cansaço',
+                                          breathlessness:'Falta de ar',
+                                          mood:'Estado emocional',
+                                          notes:'Observações',
+                                          wellbeing:'Bem-estar',
+                                          difficulties:'Dificuldades',
+                                          needs:'Necessidades'
+                                        }[key] || key;
+
+                                        return (
+                                          <div key={key}>
+                                            <strong style={{fontSize:'13px'}}>{label}</strong>
+                                            <p style={{
+                                              margin:'4px 0 0',
+                                              whiteSpace:'pre-wrap',
+                                              overflowWrap:'anywhere',
+                                              fontSize:'14px'
+                                            }}>
+                                              {formatAnswer(value)}
+                                            </p>
+                                          </div>
+                                        );
+                                      })}
+
+                                      {!Object.keys(answers).length && (
+                                        <p className="muted">Este registo não contém respostas.</p>
+                                      )}
+                                    </div>
+
+                                    {alreadyViewed && (
+                                      <p style={{
+                                        color:'#15803d',
+                                        fontSize:'12px',
+                                        marginTop:'12px'
+                                      }}>
+                                        Visualizado em {formatDate(viewedEntries[item.id])}
+                                      </p>
+                                    )}
+
+                                    {!alreadyViewed && (
+                                      <button
+                                        type="button"
+                                        className="button"
+                                        style={{marginTop:'14px'}}
+                                        disabled={viewingBusy === item.id}
+                                        onClick={() => markAsViewed(item.id)}
+                                      >
+                                        <Eye size={16}/>
+                                        {viewingBusy === item.id
+                                          ? 'A guardar...'
+                                          : 'Marcar como visualizado'}
+                                      </button>
+                                    )}
+                                  </article>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p className="muted" style={{marginTop:'16px'}}>
+                              Este doente ainda não tem registos submetidos.
+                            </p>
+                          )}
+                        </div>
+                      </>
+                    )}
+
+                    <div className="content-card">
+                      <h3><ClipboardList size={19}/> Notas de acompanhamento</h3>
+
+                      <form onSubmit={saveProfessionalNote}>
+                        <label>
+                          Nota profissional
+                          <textarea
+                            rows="5"
+                            value={note}
+                            onChange={e => setNote(e.target.value)}
+                            required
+                            placeholder="Registe uma nota de acompanhamento…"
+                          />
+                        </label>
+
+                        <button className="button" disabled={busy}>
+                          Guardar nota
+                        </button>
+                      </form>
                     </div>
-
-                    {alreadyViewed && (
-                      <p style={{
-                        color:'#15803d',
-                        fontSize:'12px',
-                        marginTop:'12px'
-                      }}>
-                        Visualizado em {formatDate(viewedEntries[item.id])}
-                      </p>
-                    )}
-
-                    {!alreadyViewed && (
-                      <button
-                        type="button"
-                        className="button"
-                        style={{marginTop:'14px'}}
-                        disabled={viewingBusy === item.id}
-                        onClick={() => markAsViewed(item.id)}
-                      >
-                        <Eye size={16}/>
-                        {viewingBusy === item.id
-                          ? 'A guardar...'
-                          : 'Marcar como visualizado'}
-                      </button>
-                    )}
-                  </article>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="muted" style={{marginTop:'16px'}}>
-              Este paciente ainda não tem registos submetidos.
-            </p>
-          )}
-        </div>
-      </>
-    )}
-
-    <div className="content-card">
-      <h3><ClipboardList size={19}/> Notas de acompanhamento</h3>
-
-      <form onSubmit={saveProfessionalNote}>
-        <label>
-          Nota profissional
-          <textarea
-            rows="5"
-            value={note}
-            onChange={e => setNote(e.target.value)}
-            required
-            placeholder="Registe uma nota de acompanhamento…"
-          />
-        </label>
-
-        <button className="button" disabled={busy}>
-          Guardar nota
-        </button>
-      </form>
-    </div>
-  </>
-)}
-
+                  </>
+                )}
 
                 {profile.role !== 'professional' && (
                   <div className="content-card history">

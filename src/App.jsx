@@ -514,11 +514,12 @@ function App() {
       const patientRecords = (records || []).filter(r => r.user_id === patient.id);
 
       return {
-        ...patient,
-        concernScore: getConcernScore(patientRecords),
-        lastRecord: records?.[0]?.created_at || null,
-        recordCount: records?.length || 0
-      };
+  ...patient,
+  concernScore: getConcernScore(patientRecords),
+  hasPatientRecords: patientRecords.length > 0,
+  lastRecord: patientRecords[0]?.created_at || records?.[0]?.created_at || null,
+  recordCount: records?.length || 0
+};
     }));
 
     enriched.sort((a, b) => {

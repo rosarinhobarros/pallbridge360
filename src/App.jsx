@@ -137,6 +137,37 @@ function getConcernScore(records) {
 
   return Math.min(100, Math.round(score));
 }
+function getConcernLevel(score, hasRecords = true) {
+  if (!hasRecords) {
+    return {
+      label: 'Sem registos',
+      color: '#64748b',
+      background: '#f1f5f9'
+    };
+  }
+
+  if (score >= 60) {
+    return {
+      label: 'Prioridade de revisão',
+      color: '#b91c1c',
+      background: '#fee2e2'
+    };
+  }
+
+  if (score >= 35) {
+    return {
+      label: 'Atenção',
+      color: '#a16207',
+      background: '#fef3c7'
+    };
+  }
+
+  return {
+    label: 'Sem agravamento assinalado',
+    color: '#15803d',
+    background: '#dcfce7'
+  };
+}
 
 function EvolutionChart({ records }) {
   const points = useMemo(() => {

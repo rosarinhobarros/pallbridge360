@@ -1550,6 +1550,90 @@ const patientsWithoutRecords = patients.filter(
                       <Stethoscope size={18}/>
                       Área de acompanhamento profissional e coordenação multidisciplinar.
                     </div>
+                    <div className="content-card" style={{ marginBottom: 24 }}>
+  <h3>
+    <AlertCircle size={20} />
+    Centro de alertas
+  </h3>
+
+  <p>
+    Visão geral dos indicadores de acompanhamento dos teus doentes.
+  </p>
+
+  <div style={{
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+    gap: 12,
+    margin: '20px 0'
+  }}>
+    <div style={{ background: '#fee2e2', padding: 16, borderRadius: 12 }}>
+      <div style={{ color: '#b91c1c', fontSize: 13 }}>Prioridade de revisão</div>
+      <strong style={{ fontSize: 30, color: '#b91c1c' }}>
+        {priorityPatients.length}
+      </strong>
+    </div>
+
+    <div style={{ background: '#fef3c7', padding: 16, borderRadius: 12 }}>
+      <div style={{ color: '#a16207', fontSize: 13 }}>Atenção</div>
+      <strong style={{ fontSize: 30, color: '#a16207' }}>
+        {attentionPatients.length}
+      </strong>
+    </div>
+
+    <div style={{ background: '#f1f5f9', padding: 16, borderRadius: 12 }}>
+      <div style={{ color: '#475569', fontSize: 13 }}>Sem registos</div>
+      <strong style={{ fontSize: 30, color: '#475569' }}>
+        {patientsWithoutRecords.length}
+      </strong>
+    </div>
+  </div>
+
+  <h4>Doentes que necessitam de acompanhamento</h4>
+
+  {priorityPatients.length === 0 && attentionPatients.length === 0 ? (
+    <p>Não existem alertas baseados nos indicadores atuais.</p>
+  ) : (
+    [...priorityPatients, ...attentionPatients].map(patient => {
+      const level = getConcernLevel(patient.concernScore);
+
+      return (
+        <div
+          key={patient.id}
+          onClick={() => openPatient(patient)}
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 12,
+            padding: 14,
+            marginTop: 10,
+            borderRadius: 12,
+            background: level.background,
+            cursor: 'pointer'
+          }}
+        >
+          <div>
+            <strong>{patient.full_name}</strong>
+            <div style={{ fontSize: 13, marginTop: 4 }}>
+              {level.label}
+            </div>
+          </div>
+
+          <strong style={{ color: level.color }}>
+            {patient.concernScore}/100 →
+          </strong>
+        </div>
+      );
+    })
+  )}
+
+  {patientsWithoutRecords.length > 0 && (
+    <p style={{ fontSize: 13, color: '#64748b', marginTop: 16 }}>
+      Existem {patientsWithoutRecords.length} doentes sem registos próprios
+      suficientes para apresentar indicadores.
+    </p>
+  )}
+</div>
 
                     <div className="content-card">
                       <div style={{
